@@ -24,6 +24,9 @@ import { Colors, getSubjectColor } from "@/utils/subjects/colors";
 import { getWeekNumberFromDate } from "@/database/useHomework";
 import { log, warn } from "@/utils/logger/logger";
 import { getSubjectEmoji } from "@/utils/subjects/emoji";
+import { useTimetable } from '@/database/useTimetable';
+import { getSubjectName } from '@/utils/subjects/name';
+import { useAccountStore } from '@/stores/account';
 
 const EmptyListComponent = memo(() => (
   <Dynamic key={'empty-list:warn'}>
@@ -59,9 +62,16 @@ export default function TabOneScreen() {
   const navigation = useNavigation();
 
   const [fetchedWeeks, setFetchedWeeks] = useState<number[]>([])
-  const [week, setWeek] = useState<CourseDay[]>([]);
   const [weekNumber, setWeekNumber] = useState(getWeekNumberFromDate(date));
   const manager = getManager();
+
+  const store = useAccountStore.getState()
+  const account = store.accounts.find(account => store.lastUsedAccount);
+  const services: string[] = account?.services?.map((service: { id: string }) => service.id) ?? [];
+  const timetable = useTimetable(undefined, weekNumber).map(day => ({
+    ...day,
+    courses: day.courses.filter(course => services.includes(course.createdByAccount))
+  })).filter(day => day.courses.length > 0);
   const fetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchWeeklyTimetable = useCallback(async (targetWeekNumber: number, forceRefresh = false) => {
@@ -87,24 +97,10 @@ export default function TabOneScreen() {
         );
 
         if (weeksToFetch.length > 0) {
-          const fetchedData = await Promise.all(
+          const _ = await Promise.all(
             weeksToFetch.map((week) => manager.getWeeklyTimetable(week))
           );
 
-          const newWeekData = fetchedData.flat();
-          setWeek((prevWeek) => {
-            const allDays = [...prevWeek, ...newWeekData];
-            const uniqueDays = [];
-            const seenDates = new Set();
-            for (const day of allDays) {
-              const dayDate = new Date(day.date).toISOString();
-              if (!seenDates.has(dayDate)) {
-                uniqueDays.push(day);
-                seenDates.add(dayDate);
-              }
-            }
-            return uniqueDays;
-          });
           setFetchedWeeks((prevFetchedWeeks) => [
             ...prevFetchedWeeks,
             ...weeksToFetch,
@@ -180,7 +176,11 @@ export default function TabOneScreen() {
   // When date changes manually, update currentIndex and scroll FlatList to correct index
   useEffect(() => {
     const newIndex = getIndexFromDate(date);
-    const newWeekNumber = getWeekNumberFromDate(date);
+    let newWeekNumber = getWeekNumberFromDate(date);
+
+    if (date.getDay() === 0) {
+      newWeekNumber += 1;
+    }
 
     if (newIndex !== currentIndex) {
       setCurrentIndex(newIndex);
@@ -236,7 +236,7 @@ export default function TabOneScreen() {
     const normalizedDayDate = new Date(dayDate);
     normalizedDayDate.setHours(0, 0, 0, 0);
 
-    const rawDayEvents: SharedCourse[] = week.find(w => {
+    const rawDayEvents: SharedCourse[] = timetable.find(w => {
       const weekDate = new Date(w.date);
       weekDate.setHours(0, 0, 0, 0);
       return weekDate.getTime() === normalizedDayDate.getTime();
@@ -275,6 +275,14 @@ export default function TabOneScreen() {
     }, [rawDayEvents]);
 
     const threshold = 30;
+
+    for (const day of timetable) {
+      for (const course of day.courses) {
+        getSubjectColor(course.subject)
+        getSubjectEmoji(course.subject)
+        getSubjectName(course.subject)
+      }
+    }
 
     const separatedDayEvents = useMemo(() => {
       if (!dayEvents || dayEvents.length === 0) return dayEvents;
@@ -334,6 +342,17 @@ export default function TabOneScreen() {
                   start={Math.floor(item.from.getTime() / 1000)}
                   end={Math.floor(item.to.getTime() / 1000)}
                   showTimes={false}
+                  onPress={() => {
+                    navigation.navigate('(modals)/course', {
+                      course: item,
+                      subjectInfo: {
+                        id: item.subjectId,
+                        name: getSubjectName(item.subject),
+                        color: getSubjectColor(item.subject) || Colors[0],
+                        emoji: getSubjectEmoji(item.subject),
+                      }
+                    });
+                  }}
                 />
               );
             }
@@ -341,7 +360,7 @@ export default function TabOneScreen() {
             return (
               <Course
                 id={item.id}
-                name={item.subject}
+                name={getSubjectName(item.subject)}
                 teacher={item.teacher}
                 room={item.room}
                 color={getSubjectColor(item.subject) || Colors[0]}
@@ -355,7 +374,7 @@ export default function TabOneScreen() {
                     course: item,
                     subjectInfo: {
                       id: item.subjectId,
-                      name: item.subject,
+                      name: getSubjectName(item.subject),
                       color: getSubjectColor(item.subject) || Colors[0],
                       emoji: getSubjectEmoji(item.subject),
                     }
@@ -389,7 +408,7 @@ export default function TabOneScreen() {
         t={t}
       />
     );
-  }, [headerHeight, bottomHeight, manualRefreshing, handleRefresh, colors, router, t, getDateFromIndex, week]);
+  }, [headerHeight, bottomHeight, manualRefreshing, handleRefresh, colors, router, t, getDateFromIndex, timetable]);
 
   const handleDateChange = useCallback((newDate: Date) => {
     setDate(newDate);
@@ -413,6 +432,7 @@ export default function TabOneScreen() {
         setShowDatePicker={setShowDatePicker}
       />
 
+      {/*
       <NativeHeaderSide side="Right">
         <MenuView
           actions={[
@@ -441,6 +461,7 @@ export default function TabOneScreen() {
           </NativeHeaderPressable>
         </MenuView>
       </NativeHeaderSide>
+      */}
 
       <NativeHeaderTitle key={"header-" + date.toISOString()}>
         <NativeHeaderTopPressable
@@ -516,7 +537,7 @@ export default function TabOneScreen() {
           initialNumToRender={1}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews
-          extraData={{ refresh, headerHeight, bottomHeight, manualRefreshing, colors, date, weekNumber, week, handleRefresh }}
+          extraData={{ refresh, headerHeight, bottomHeight, manualRefreshing, colors, date, weekNumber, timetable, handleRefresh }}
         />
       </View>
     </>

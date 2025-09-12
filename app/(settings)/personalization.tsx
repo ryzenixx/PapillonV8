@@ -1,6 +1,6 @@
-import { Alert, ScrollView } from "react-native";
+import { Alert, Platform, ScrollView } from "react-native";
 import Stack from "@/ui/components/Stack";
-import React from "react";
+import React, { useEffect } from "react";
 import List from "@/ui/components/List";
 import Item, { Trailing } from "@/ui/components/Item";
 import Typography from "@/ui/components/Typography";
@@ -16,6 +16,9 @@ import { useAccountStore } from "@/stores/account";
 import { useSettingsStore } from "@/stores/settings";
 import { t } from "i18next";
 import { router } from "expo-router";
+import { useHeaderHeight } from "@react-navigation/elements";
+import { Dynamic } from "@/ui/components/Dynamic";
+import { FadeIn, FadeOut } from "react-native-reanimated";
 
 
 const PersonalizationSettings = () => {
@@ -25,28 +28,48 @@ const PersonalizationSettings = () => {
   const settingsStore = useSettingsStore(state => state.personalization);
   const mutateProperty = useSettingsStore(state => state.mutateProperty);
 
-  // Trouve la couleur par défaut à partir de l'enum stocké
   const defaultColorData = AppColors.find(color => color.colorEnum === settingsStore.colorSelected) || AppColors[0];
   const [selectedColor, setSelectedColor] = React.useState<string>(defaultColorData.mainColor);
   const [selectedTheme, setSelectedTheme] = React.useState<"light" | "dark" | "auto">("auto");
 
+  const height = useHeaderHeight()
+
+  useEffect(() => {
+    if (settingsStore.theme) {
+      setSelectedTheme(settingsStore.theme);
+    }
+  }, []);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        // change theme in store
+        mutateProperty('personalization', {
+          theme: selectedTheme
+        });
+      }, 100);
+    });
+  }, [selectedTheme]);
+
   return (
     <>
-      <LinearGradient
-        colors={[selectedColor + "50", selectedColor + "00"]}
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 400,
-        }}
-      />
+      <Dynamic animated entering={FadeIn} exiting={FadeOut} key={'color-grad-stgs:' + selectedColor}>
+        <LinearGradient
+          colors={[selectedColor + "50", selectedColor + "00"]}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 400,
+          }}
+        />
+      </Dynamic>
 
       <ScrollView
         contentContainerStyle={{ padding: 16 }}
         contentInsetAdjustmentBehavior="always"
-        style={{ flex: 1 }}
+        style={{ flex: 1, paddingTop: Platform.OS === "android" ? height : 0 }}
       >
         <Stack direction="horizontal"
           gap={10}
@@ -151,6 +174,7 @@ const PersonalizationSettings = () => {
               </Stack>
             </Trailing>
           </Item>
+          {/*
           <Item onPress={() => {
             Alert.alert("Ça arrive... ✨", "Cette fonctionnalité n'est pas encore disponible.")
           }}
@@ -165,6 +189,7 @@ const PersonalizationSettings = () => {
               color={"secondary"}
             >{t("Settings_Personalization_Icon_Description")}</Typography>
           </Item>
+          */}
           <Item
             onPress={() => {
               router.push("/(settings)/subject_personalization");

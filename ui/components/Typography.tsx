@@ -1,8 +1,9 @@
 import { useTheme } from "@react-navigation/native";
 import React from "react";
-import { StyleSheet, Text, TextProps, TextStyle } from "react-native";
+import { DimensionValue, StyleSheet, Text, TextProps, TextStyle, View } from "react-native";
 
 import { screenOptions } from "@/utils/theme/ScreenOptions";
+import SkeletonView from "@/ui/components/SkeletonView";
 
 // Map to actual font family names loaded in assets/fonts
 const FONT_FAMILIES = {
@@ -109,6 +110,10 @@ export interface TypographyProps extends TextProps {
   inline?: boolean;
   nowrap?: boolean;
   weight?: keyof typeof WEIGHT_STYLES;
+  skeleton?: boolean;
+  skeletonLines?: number;
+  skeletonWidth?: DimensionValue;
+  italic?: boolean;
 }
 
 // Cache for computed color styles per theme
@@ -141,9 +146,74 @@ const Typography: React.FC<TypographyProps> = React.memo(
     nowrap = false,
     weight,
     style,
+    skeleton = false,
+    skeletonLines = 1,
+    skeletonWidth,
+    italic = false,
     ...rest
   }) => {
     const { colors } = useTheme();
+
+    const getStyle = (): TextStyle => {
+      return StyleSheet.flatten(style || {}) as TextStyle;
+    }
+
+    const getFlexAlignment = () => {
+      switch (align) {
+        case "left":
+          return "flex-start";
+        case "center":
+          return "center";
+        case "right":
+          return "flex-end";
+        case "justify":
+          return "stretch";
+        default:
+          return "flex-start";
+      }
+    }
+
+    const getFontSize = () => {
+      const flattenedStyle = getStyle();
+      return flattenedStyle.fontSize || VARIANTS[variant].fontSize;
+    }
+
+    const getLineHeight = () => {
+      const flattenedStyle = getStyle();
+      return (flattenedStyle.lineHeight || VARIANTS[variant].lineHeight) - (getFontSize() || 16);
+    }
+
+    const calculateSkeletonWidth = (index: number) => {
+      if (typeof skeletonWidth === "number") {
+        return (skeletonWidth as number) * (1 - (index / 5));
+      } else if (typeof skeletonWidth === "string" && skeletonWidth.endsWith("%")) {
+        const percentage = parseFloat(skeletonWidth) / 100;
+        return `${percentage * (1 - (index / 5)) * 100}%`;
+      }
+      if (typeof rest.children === "string") {
+        return `${(rest.children.length * 2) * (1 - (index / 5))}%`;
+      }
+      return "100%";
+    }
+
+    if (skeleton)
+      return (
+        <View {...rest} style={[{ flexDirection: "column", alignItems: getFlexAlignment() }, style]}>
+          {Array.from({ length: skeletonLines }).map((_, index) => (
+            <SkeletonView
+              key={index}
+              style={{
+                width: calculateSkeletonWidth(index),
+                minWidth: 50,
+                height: getFontSize() || 16,
+                borderRadius: 4,
+                marginTop: getLineHeight() / 2,
+                marginBottom: getLineHeight() / 2,
+              }}
+            />
+          ))}
+        </View>
+      );
 
     // Generate cache key for this specific combination
     const cacheKey = React.useMemo(() => {
@@ -153,7 +223,7 @@ const Typography: React.FC<TypographyProps> = React.memo(
 
       // Only cache if no custom styles or custom colors to avoid memory leaks
       if (!hasCustomStyle && !isCustomColor) {
-        return `${variant}-${color}-${align}-${inline}-${colors.primary}-${colors.text}`;
+        return `${variant}-${color}-${align}-${inline}-${colors.primary}-${colors.text}-${weight}-${italic}`;
       }
       return null;
     }, [variant, color, align, inline, colors.primary, colors.text, style]);
@@ -169,6 +239,7 @@ const Typography: React.FC<TypographyProps> = React.memo(
       const variantStyle = VARIANTS[variant];
       const alignStyle = ALIGNMENT_STYLES[align];
       const weightStyle = WEIGHT_STYLES[weight] || null;
+      const italicStyle = italic ? { transform: [{ skewX: "-13deg" }] } : {};
 
       const inlineStyle: TextStyle = inline ? (() => {
         let fontSize: number | undefined;
@@ -201,6 +272,7 @@ const Typography: React.FC<TypographyProps> = React.memo(
           ...weightStyle, // Ensure weightStyle is merged here
           ...(Array.isArray(style) ? StyleSheet.flatten(style) : style),
           ...inlineStyle,
+          ...italicStyle
         };
       } else {
         // For common cases without custom styles, use optimized merging
@@ -210,6 +282,7 @@ const Typography: React.FC<TypographyProps> = React.memo(
           ...colorStyle,
           ...weightStyle, // Ensure weightStyle is merged here
           ...inlineStyle,
+          ...italicStyle
         };
 
         // Cache only common cases
@@ -219,7 +292,7 @@ const Typography: React.FC<TypographyProps> = React.memo(
       }
 
       return finalStyle;
-    }, [colors, variant, color, align, style, cacheKey]);
+    }, [colors, variant, color, align, style, italic, cacheKey]);
 
     return <Text {...rest} style={computedStyle} numberOfLines={nowrap ? 1 : rest.numberOfLines} />;
   },

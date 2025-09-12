@@ -6,11 +6,12 @@ import Reanimated, { Easing, FadeIn, FadeOut, LinearTransition, useAnimatedStyle
 import { Animation } from "../utils/Animation";
 import { PapillonZoomIn, PapillonZoomOut } from "../utils/Transition";
 import Typography from "./Typography";
+import * as ExpoHaptics from "expo-haptics";
 
 const AnimatedPressable = Reanimated.createAnimatedComponent(Pressable);
 
 type Variant = 'primary' | 'outline' | 'light' | 'ghost' | 'service';
-export type Color = 'primary' | 'text' | 'light' | 'danger' | 'cherry' | 'black' | 'card' | 'blue';
+export type Color = 'primary' | 'text' | 'light' | 'danger' | 'cherry' | 'black' | 'card' | 'blue' | 'orange';
 type Size = 'small' | 'medium' | 'large';
 type Alignment = 'start' | 'center' | 'end';
 
@@ -26,7 +27,7 @@ interface ButtonProps extends PressableProps {
   disabled?: boolean;
   disableAnimation?: boolean;
   alignment?: Alignment;
-};
+}
 
 const defaultProps = {
   variant: 'primary' as Variant,
@@ -67,7 +68,8 @@ const Button: React.FC<ButtonProps> = React.memo(({
     danger: '#DC1400',
     cherry: '#D60046',
     black: '#000000',
-    blue: '#0059DD'
+    blue: '#0059DD',
+    orange: '#C94F1A',
   }), [colors]);
 
   // Animation scale
@@ -79,6 +81,7 @@ const Button: React.FC<ButtonProps> = React.memo(({
   }), []);
 
   const handlePressIn = useCallback(() => {
+    ExpoHaptics.impactAsync(ExpoHaptics.ImpactFeedbackStyle.Soft)
     "use worklet";
     scale.value = withTiming(0.97, { duration: 100, easing: Easing.out(Easing.exp) });
     opacity.value = withTiming(0.7, { duration: 50, easing: Easing.out(Easing.exp) });

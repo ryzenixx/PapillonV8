@@ -19,7 +19,6 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ActivityIndicator, Image, Pressable, View } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
-export { getServiceName } from "@/utils/services/helper"
 
 export default function QRCodeAndCardsPage() {
   const [wallets, setWallets] = useState<Balance[]>([]);
@@ -29,9 +28,6 @@ export default function QRCodeAndCardsPage() {
   const [loadingWallets, setLoadingWallets] = useState(true);
 
   const account = accounts.find((a) => a.id === lastUsedAccount);
-  const selfCompatible = account?.services.filter(
-    service => [Services.TURBOSELF, Services.ARD, Services.IZLY].includes(service.serviceId)
-  );
 
   async function fetchWallets() {
     const manager = getManager()
@@ -46,10 +42,10 @@ export default function QRCodeAndCardsPage() {
 
   useEffect(() => {
     fetchWallets();
-  }, [accounts])
+  }, [accounts, account])
 
   const cardOffset = 60;
-  const cardHeight = 210;
+  const cardHeight = 170;
 
   const pileHeight = cardHeight + (wallets.length - 1) * cardOffset;
   const { t } = useTranslation();
@@ -59,7 +55,7 @@ export default function QRCodeAndCardsPage() {
   return (
     <>
       <ScrollView style={{ padding: 20, flex: 1 }}>
-        {selfCompatible && selfCompatible?.length > 0 ? (
+        {wallets && wallets?.length > 0 ? (
           <>
             <View style={{ position: "relative", height: pileHeight }}>
               {wallets.map((c, i) => (
@@ -79,7 +75,7 @@ export default function QRCodeAndCardsPage() {
               ))}
             </View>
 
-            <View style={{ width: "100%", flex: 1, alignItems: "center", marginTop: 40 }}>
+            <View style={{ width: "100%", flex: 1, alignItems: "center", marginTop: 60 }}>
               <Button
                 inline
                 title="Ajouter"
@@ -188,7 +184,7 @@ export function Card({
           bottom: 0,
           right: 0,
           left: 0,
-          width: "100%",
+          width: "104%",
           height: 215,
         }}
         resizeMode="cover"

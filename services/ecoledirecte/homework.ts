@@ -1,5 +1,7 @@
 import { Account, Document, Session, setHomeworkState, studentHomeworks } from "pawdirecte";
 
+import { warn } from "@/utils/logger/logger";
+
 import { Attachment, AttachmentType } from "../shared/attachment";
 import { Homework } from "../shared/homework";
 
@@ -10,24 +12,37 @@ export async function fetchEDHomeworks(
   weekNumber: number
 ): Promise<Homework[]> {
   const weekdays = weekNumberToDaysList(weekNumber);
-  const allHomeworks = await Promise.all(
-    weekdays.map(day =>
-      studentHomeworks(session, account, day.toISOString().split("T")[0]).then(res =>
-        res.homeworks.map(hw => ({
-          id: String(hw.id),
-          subject: hw.subject,
-          content: hw.content,
-          dueDate: day,
-          isDone: hw.done,
-          attachments: mapEDAttachments(hw.attachments, accountId),
-          evaluation: hw.exam,
-          custom: false,
+  const response: Homework[] = [];
+  for (const date of weekdays) {
+    const formattedDate = formatDate(date);
+
+    const { homeworks } = await studentHomeworks(
+      session,
+      account,
+      formattedDate,
+    );
+
+    for (const homework of homeworks) {
+      response.push({
+        attachments: homework.attachments.map((att) => ({
+          url: `${att.name}\\${att.id}\\${att.kind}`,
+          type: AttachmentType.FILE,
+          name: att.name,
           createdByAccount: accountId
-        }))
-      )
-    )
-  );
-  return allHomeworks.flat();
+        })),
+        content: homework.content,
+        isDone: homework.done,
+        dueDate: date,
+        id: homework.id.toString(),
+        subject: homework.subject,
+        evaluation: homework.exam,
+        custom: false,
+        createdByAccount: accountId
+      });
+    }
+  }
+
+  return response
 }
 
 function mapEDAttachments(data: Document[], accountId: string): Attachment[] {
@@ -47,24 +62,25 @@ export async function setEDHomeworkAsDone(session: Session, account: Account, ho
   }
 }
 
-// From https://github.com/PapillonApp/Papillon/blob/main/src/utils/epochWeekNumber.ts
+import { startOfISOWeek, addDays } from "date-fns";
 
-const EPOCH_WN_CONFIG = {
-  setHour: 6, // We are in Europe, so we set the hour to 6 UTC to avoid any problem with the timezone (= 2h in the morning in Summer Paris timezone)
-  setStartDay: 1, // We set the first day of the week to Monday to ensure that the week number is the same for the whole world
-  setMiddleDay: 3, // We set the middle day of the week to Wednesday to ensure <... same than above ...>
-  setEndDay: 7, // We set the last day of the week to Sunday to ensure <...>
-  numberOfMsInAWeek: 1000 /* ms */ * 60 /* s */ * 60 /* min */ * 24 /* h */ * 7, /* days */
-  adjustEpochInitialDate: 259200000, // =(((new Date(0)).getDay()-1) * EPOCH_WN_CONFIG.numberOfMsInAWeek/7) // We need to substract this for having a good range cause 01/01/1970 was not a Monday and the "-1" is to have Monday as the first day of the week
+export const weekNumberToDaysList = (weekNumber: number, year?: number): Date[] => {
+  const currentYear = year || new Date().getFullYear();
+  
+  // Trouver le premier jour ISO de l'année (lundi de la semaine 1)
+  const jan4 = new Date(currentYear, 0, 4); 
+  const firstWeekStart = startOfISOWeek(jan4);
+  
+  // Calculer le lundi de la semaine demandée
+  const weekStart = new Date(firstWeekStart);
+  weekStart.setDate(firstWeekStart.getDate() + (weekNumber - 1) * 7);
+
+  // Construire la liste des jours
+  return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 };
 
-export const weekNumberToDaysList = (epochWeekNumber: number): Date[] => {
-  const baseTime =
-    epochWeekNumber * EPOCH_WN_CONFIG.numberOfMsInAWeek -
-    EPOCH_WN_CONFIG.adjustEpochInitialDate;
-  const weekdays = [];
-  for (let i = 0; i < 7; i++) {
-    weekdays.push(new Date(baseTime + i * 86400000));
-  }
-  return weekdays;
+import { format } from "date-fns";
+
+export const formatDate = (date: Date): string => {
+  return format(date, "yyyy-MM-dd");
 };
