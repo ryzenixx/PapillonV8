@@ -45,6 +45,7 @@ import { Homework } from "@/services/shared/homework";
 import { getSubjectName } from "@/utils/subjects/name";
 import { generateId } from "@/utils/generateId";
 import CompactTask from "@/ui/components/CompactTask";
+import { removeAllDuplicates } from "@/database/DatabaseProvider";
 
 const IndexScreen = () => {
   const now = new Date();
@@ -97,6 +98,7 @@ const IndexScreen = () => {
       }
 
     } catch (error) {
+      if (String(error).includes("Unable to find")) return;
       alert.showAlert({
         title: "Connexion impossible",
         description: "Il semblerait que ta session a expiré. Tu pourras renouveler ta session dans les paramètres en liant à nouveau ton compte.",
@@ -206,14 +208,6 @@ const IndexScreen = () => {
 
       dayCourse = dayCourse.filter(course => course.to.getTime() > Date.now());
 
-      if (dayCourse.length === 0) {
-        const nextDay = weeklyTimetable
-          .filter(day => day.date.getTime() > today.getTime())
-          .sort((a, b) => a.date.getTime() - b.date.getTime())[0];
-
-        dayCourse = nextDay?.courses ?? [];
-      }
-
       setCourses(dayCourse);
     };
     fetchData();
@@ -260,6 +254,7 @@ const IndexScreen = () => {
   }, []);
 
   useEffect(() => {
+    removeAllDuplicates()
     if (accounts.length > 0) {
       checkConsent().then(consent => {
         if (!consent.given) {
@@ -290,6 +285,22 @@ const IndexScreen = () => {
     );
   }, [freshHomeworks]);
 
+  const getScheduleMessage = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todayAllCourses = weeklyTimetable.find(day => day.date.getTime() === today.getTime())?.courses ?? [];
+
+    const remainingToday = courses.length;
+    if (remainingToday === 0) {
+      return todayAllCourses.length > 0 ? t("Home_Planned_Finished") : t("Home_Planned_None");
+    } else if (remainingToday === 1) {
+      return t("Home_Planned_One");
+    } else {
+      return t("Home_Planned_Number", { number: remainingToday });
+    }
+  };
+
   const headerItems = [
     (
       <Stack
@@ -308,9 +319,7 @@ const IndexScreen = () => {
           </Typography>
         </Dynamic>
         <Typography variant="body1" color={foregroundSecondary}>
-          {courses.length == 0 ? t("Home_Planned_None")
-            : courses.length == 1 ? t("Home_Planned_One")
-              : t("Home_Planned_Number", { number: courses.length })}
+          {getScheduleMessage()}
         </Typography>
       </Stack>
     ),
@@ -374,7 +383,8 @@ const IndexScreen = () => {
               style={{
                 backgroundColor: "transparent",
                 borderCurve: "continuous",
-                paddingBottom: 12
+                paddingBottom: 12,
+                marginTop: -10,
               }}
               horizontal
               data={headerItems}
@@ -399,7 +409,8 @@ const IndexScreen = () => {
                     flex: 1,
                     overflow: "hidden",
                     alignItems: "center",
-                    justifyContent: "center"
+                    justifyContent: "center",
+                    marginTop: 10,
                   }}
                 >
                   {item}
@@ -454,7 +465,7 @@ const IndexScreen = () => {
                   <Course
                     key={item.id}
                     id={item.id}
-                    name={item.subject}
+                    name={getSubjectName(item.subject)}
                     teacher={item.teacher}
                     room={item.room}
                     color={getSubjectColor(item.subject)}
@@ -463,6 +474,7 @@ const IndexScreen = () => {
                     start={Math.floor(item.from.getTime() / 1000)}
                     end={Math.floor(item.to.getTime() / 1000)}
                     readonly={!!item.createdByAccount}
+                    compact={true}
                     onPress={() => {
                       (navigation as any).navigate('(modals)/course', {
                         course: item,
